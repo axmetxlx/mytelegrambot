@@ -105,7 +105,7 @@ async def help_command(message: types.Message):
 # ID
 @dp.message(Command("id"))
 async def id_command(message: types.Message):
-    await message.answer(f"Сенің ID-ың 👉: {message.from_user.id}")
+    await message.answer(f"Сенің ID-ың 👉:  {message.from_user.id}")
 
 
 # ADMIN
