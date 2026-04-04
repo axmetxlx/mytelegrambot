@@ -1,6 +1,8 @@
-import os
+import asyncio
 import logging
+import os
 import aiosqlite
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
@@ -10,10 +12,9 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# ------------------- НАСТРОЙКА -------------------
+# ----------------- Настройка -----------------
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
-
 ADMIN_CLASSES = {
     5199542672: "8A",
     7357106839: "9A"
@@ -22,11 +23,10 @@ ADMIN_CLASSES = {
 bot = Bot(TOKEN)
 dp = Dispatcher()
 app = FastAPI()
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-# ------------------- БАЗА -------------------
+# ----------------- База -----------------
 async def init_db():
     async with aiosqlite.connect("db.db") as db:
         await db.execute("""
@@ -39,12 +39,12 @@ async def init_db():
         """)
         await db.commit()
 
-# ------------------- FSM -------------------
+# ----------------- FSM -----------------
 class AddHW(StatesGroup):
     choosing_day = State()
     waiting_for_text = State()
 
-# ------------------- DAYS -------------------
+# ----------------- Дни -----------------
 DAY_NAMES = {
     "mon": "Дүйсенбі",
     "tue": "Сейсенбі",
@@ -53,14 +53,14 @@ DAY_NAMES = {
     "fri": "Жұма"
 }
 
-# ------------------- MENU -------------------
+# ----------------- Клавиатуры -----------------
 def main_menu():
     return types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="7A", callback_data="class_7A")],
         [types.InlineKeyboardButton(text="8A", callback_data="class_8A"),
          types.InlineKeyboardButton(text="8Ә", callback_data="class_8AE")],
         [types.InlineKeyboardButton(text="8Б", callback_data="class_8B"),
-         types.InlineKeyboardButton(text="9A", callback_data="class_9A")]
+         types.InlineKeyboardButton(text="9A", callback_data="class_9A")],
     ])
 
 def admin_menu():
@@ -75,56 +75,37 @@ def back_main_btn():
         [types.InlineKeyboardButton(text="⬅️ Меню", callback_data="back_main")]
     ])
 
-# ------------------- START -------------------
+# ----------------- Команды -----------------
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer(
-        "Сәлем! 👋\nҚай сыныптың үй тапсырмасын көргің келеді? 👇",
-        reply_markup=main_menu()
-    )
+    await message.answer("Сәлем! 👋\nҚай сыныптың үй тапсырмасын көргің келеді? 👇", reply_markup=main_menu())
 
-# ------------------- HELP -------------------
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
     await message.answer(
-        "Командалар:\n"
         "/start - Ботты іске қосу\n"
         "/help - Командалар тізімі\n"
-        "/admin - Админ панель, үй жұмысын қосу (тек админдерге)\n"
+        "/admin - Админ панель (тек админдерге)\n"
         "/id - Өзіңнің ID-ың"
     )
 
-# ------------------- ID -------------------
 @dp.message(Command("id"))
 async def id_command(message: types.Message):
     await message.answer(f"Сенің ID-ың 👉: {message.from_user.id}")
 
-# ------------------- ADMIN -------------------
 @dp.message(Command("admin"))
 async def admin_panel(message: types.Message):
     if message.from_user.id not in ADMIN_CLASSES:
         return await message.answer("Сен админ емессің ❌")
     await message.answer("Админ панель 🔐", reply_markup=admin_menu())
 
-# ------------------- CALLBACKS -------------------
-# Back main
+# ----------------- Callback -----------------
 @dp.callback_query(F.data == "back_main")
 async def back_main(query: CallbackQuery, state: FSMContext):
     await state.clear()
-    await query.message.edit_text(
-        "Қай сыныптың үй тапсырмасын көргің келеді? 👇",
-        reply_markup=main_menu()
-    )
+    await query.message.edit_text("Қай сыныптың үй тапсырмасын көргің келеді? 👇", reply_markup=main_menu())
     await query.answer()
 
-# Back admin
-@dp.callback_query(F.data == "back_admin")
-async def back_admin(query: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await query.message.edit_text("Админ панель 🔐", reply_markup=admin_menu())
-    await query.answer()
-
-# Add homework
 @dp.callback_query(F.data == "add_hw")
 async def add_hw(query: CallbackQuery):
     user_class = ADMIN_CLASSES.get(query.from_user.id)
@@ -135,7 +116,11 @@ async def add_hw(query: CallbackQuery):
     await query.message.edit_text("Класс 👇", reply_markup=kb)
     await query.answer()
 
-# Choose class for adding
+@dp.callback_query(F.data == "back_admin")
+async def back_admin(query: CallbackQuery):
+    await query.message.edit_text("Админ панель 🔐", reply_markup=admin_menu())
+    await query.answer()
+
 @dp.callback_query(F.data.startswith("hw_"))
 async def choose_class(query: CallbackQuery, state: FSMContext):
     user_class = ADMIN_CLASSES.get(query.from_user.id)
@@ -155,7 +140,6 @@ async def choose_class(query: CallbackQuery, state: FSMContext):
     await query.message.edit_text("Күн таңда 👇", reply_markup=kb)
     await query.answer()
 
-# Back add
 @dp.callback_query(F.data == "back_add")
 async def back_add(query: CallbackQuery):
     user_class = ADMIN_CLASSES.get(query.from_user.id)
@@ -166,7 +150,6 @@ async def back_add(query: CallbackQuery):
     await query.message.edit_text("Класс 👇", reply_markup=kb)
     await query.answer()
 
-# Choose day
 @dp.callback_query(F.data.startswith("day_"))
 async def choose_day(query: CallbackQuery, state: FSMContext):
     day = query.data.split("_")[1]
@@ -181,7 +164,6 @@ async def choose_day(query: CallbackQuery, state: FSMContext):
     )
     await query.answer()
 
-# Back days
 @dp.callback_query(F.data == "back_days")
 async def back_days(query: CallbackQuery, state: FSMContext):
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
@@ -196,7 +178,6 @@ async def back_days(query: CallbackQuery, state: FSMContext):
     await query.message.edit_text("Күн таңда 👇", reply_markup=kb)
     await query.answer()
 
-# Save homework
 @dp.message(AddHW.waiting_for_text)
 async def save_hw(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -207,10 +188,9 @@ async def save_hw(message: types.Message, state: FSMContext):
         await db.execute("DELETE FROM homework WHERE class=? AND day=?", (class_name, day))
         await db.execute("INSERT INTO homework (class, day, text) VALUES (?, ?, ?)", (class_name, day, text))
         await db.commit()
-    await message.answer("Сақталды ✅", reply_markup=back_main_btn())
+    await message.answer("Сақталды ✅")
     await state.clear()
 
-# Show homework
 @dp.callback_query(F.data.startswith("class_"))
 async def show_hw(query: CallbackQuery):
     class_name = query.data.split("_")[1]
@@ -225,7 +205,6 @@ async def show_hw(query: CallbackQuery):
     await query.message.edit_text(text, reply_markup=back_main_btn())
     await query.answer()
 
-# Delete menu
 @dp.callback_query(F.data == "delete_menu")
 async def delete_menu(query: CallbackQuery):
     user_class = ADMIN_CLASSES.get(query.from_user.id)
@@ -240,7 +219,6 @@ async def delete_menu(query: CallbackQuery):
     await query.message.edit_text("Қай күнді өшіреміз?", reply_markup=kb)
     await query.answer()
 
-# Delete homework
 @dp.callback_query(F.data.startswith("delete_"))
 async def delete_hw(query: CallbackQuery):
     _, class_name, day = query.data.split("_")
@@ -250,15 +228,19 @@ async def delete_hw(query: CallbackQuery):
     await query.message.edit_text("Өшірілді ✅", reply_markup=back_main_btn())
     await query.answer()
 
-# Notify admins
+# ----------------- Notify -----------------
 async def notify_admins(bot: Bot):
     for admin_id in ADMIN_CLASSES.keys():
         try:
-            await bot.send_message(admin_id, "⏰ Ескерту!\nҮй тапсырмасын толтыруды ұмытпа 📚")
+            await bot.send_message(admin_id, "⏰ Ескерту! Үй тапсырмасын толтыруды ұмытпа 📚")
         except:
             pass
 
-# ------------------- WEBHOOK -------------------
+# ----------------- FastAPI routes -----------------
+@app.get("/")
+async def root():
+    return {"status": "Bot server is running"}
+
 @app.post("/api/bot")
 async def webhook(request: Request):
     data = await request.json()
@@ -266,7 +248,7 @@ async def webhook(request: Request):
     await dp.feed_update(bot, update)
     return {"ok": True}
 
-# ------------------- STARTUP -------------------
+# ----------------- Startup -----------------
 @app.on_event("startup")
 async def on_startup():
     await init_db()
