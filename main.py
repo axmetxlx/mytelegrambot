@@ -235,12 +235,19 @@ async def delete_hw(query: CallbackQuery):
         await query.message.edit_text("Өшірілді ✅", reply_markup=back_main_btn())
 
 # ----------------- Webhook -----------------
+@app.get("/")
+async def root():
+    return {"status": "Bot server is running"}
+
 @app.post("/api/bot")
-async def telegram_webhook(update: dict):
+async def telegram_webhook(request: Request):
     try:
-        await dp.feed_update(bot, types.Update(**update))
+        data = await request.json()
+        update = types.Update(**data)
+        await dp.feed_update(bot, update)
         return {"ok": True}
     except Exception as e:
+        # Егер тест үшін JSON бос немесе дұрыс емес болса, қате көрсетіледі
         return {"error": str(e)}
 
 @app.on_event("startup")
