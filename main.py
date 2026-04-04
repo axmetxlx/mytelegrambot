@@ -178,16 +178,20 @@ async def back_days(query: CallbackQuery, state: FSMContext):
 
 @dp.message(AddHW.waiting_for_text)
 async def save_hw(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    class_name = data["class_name"]
-    day = data["day"]
-    text = message.text
-    async with aiosqlite.connect("db.db") as db:
-        await db.execute("DELETE FROM homework WHERE class=? AND day=?", (class_name, day))
-        await db.execute("INSERT INTO homework (class, day, text) VALUES (?, ?, ?)", (class_name, day, text))
-        await db.commit()
-    await message.answer("Сақталды ✅")
-    await state.clear()
+    try:
+        data = await state.get_data()
+        class_name = data.get("class_name")
+        day = data.get("day")
+        text = message.text
+        async with aiosqlite.connect("db.db") as db:
+            await db.execute("DELETE FROM homework WHERE class=? AND day=?", (class_name, day))
+            await db.execute("INSERT INTO homework (class, day, text) VALUES (?, ?, ?)", (class_name, day, text))
+            await db.commit()
+        await message.answer("Сақталды ✅")
+        await state.clear()
+    except Exception as e:
+        logger.error(f"Save HW error: {e}")
+        await message.answer(f"Қате болды ❌: {e}")
 
 @dp.callback_query(F.data.startswith("class_"))
 async def show_hw(query: CallbackQuery):
