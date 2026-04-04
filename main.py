@@ -1,12 +1,10 @@
-import asyncio
-import logging
 import os
+import logging
 import aiosqlite
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import CallbackQuery, Update
+from aiogram.types import CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
@@ -180,19 +178,16 @@ async def back_days(query: CallbackQuery, state: FSMContext):
 
 @dp.message(AddHW.waiting_for_text)
 async def save_hw(message: types.Message, state: FSMContext):
-    try:
-        data = await state.get_data()
-        class_name = data["class_name"]
-        day = data["day"]
-        text = message.text
-        async with aiosqlite.connect("db.db") as db:
-            await db.execute("DELETE FROM homework WHERE class=? AND day=?", (class_name, day))
-            await db.execute("INSERT INTO homework (class, day, text) VALUES (?, ?, ?)", (class_name, day, text))
-            await db.commit()
-        await message.answer("Сақталды ✅")
-        await state.clear()
-    except Exception as e:
-        await message.answer(f"Қате шықты ❌: {e}")
+    data = await state.get_data()
+    class_name = data["class_name"]
+    day = data["day"]
+    text = message.text
+    async with aiosqlite.connect("db.db") as db:
+        await db.execute("DELETE FROM homework WHERE class=? AND day=?", (class_name, day))
+        await db.execute("INSERT INTO homework (class, day, text) VALUES (?, ?, ?)", (class_name, day, text))
+        await db.commit()
+    await message.answer("Сақталды ✅")
+    await state.clear()
 
 @dp.callback_query(F.data.startswith("class_"))
 async def show_hw(query: CallbackQuery):
@@ -236,8 +231,8 @@ async def notify_admins(bot: Bot):
     for admin_id in ADMIN_CLASSES.keys():
         try:
             await bot.send_message(admin_id, "⏰ Ескерту! Үй тапсырмасын толтыруды ұмытпа 📚")
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to notify {admin_id}: {e}")
 
 # ----------------- FastAPI routes -----------------
 @app.get("/")
@@ -252,7 +247,8 @@ async def webhook(request: Request):
         await dp.feed_update(bot, update)
         return {"ok": True}
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"Webhook error: {e}")
+        return {"ok": False, "error": str(e)}
 
 # ----------------- Startup -----------------
 @app.on_event("startup")
