@@ -1,6 +1,9 @@
-import os
+import asyncio
 import logging
+import os
 import aiosqlite
+import tempfile
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
@@ -24,9 +27,11 @@ app = FastAPI()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# ----------------- База -----------------
+# ----------------- Database -----------------
+DB_PATH = os.path.join(tempfile.gettempdir(), "db.db")  # Vercel writeable temp file
+
 async def init_db():
-    async with aiosqlite.connect("db.db") as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
         CREATE TABLE IF NOT EXISTS homework (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,7 +188,7 @@ async def save_hw(message: types.Message, state: FSMContext):
         class_name = data.get("class_name")
         day = data.get("day")
         text = message.text
-        async with aiosqlite.connect("db.db") as db:
+        async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("DELETE FROM homework WHERE class=? AND day=?", (class_name, day))
             await db.execute("INSERT INTO homework (class, day, text) VALUES (?, ?, ?)", (class_name, day, text))
             await db.commit()
@@ -191,12 +196,12 @@ async def save_hw(message: types.Message, state: FSMContext):
         await state.clear()
     except Exception as e:
         logger.error(f"Save HW error: {e}")
-        await message.answer(f"Қате болды ❌: {e}")
+        await message.answer(f"Қате ❌: {e}")
 
 @dp.callback_query(F.data.startswith("class_"))
 async def show_hw(query: CallbackQuery):
     class_name = query.data.split("_")[1]
-    async with aiosqlite.connect("db.db") as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("SELECT day, text FROM homework WHERE class=?", (class_name,))
         rows = await cursor.fetchall()
     if not rows:
@@ -223,20 +228,24 @@ async def delete_menu(query: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("delete_"))
 async def delete_hw(query: CallbackQuery):
-    _, class_name, day = query.data.split("_")
-    async with aiosqlite.connect("db.db") as db:
-        await db.execute("DELETE FROM homework WHERE class=? AND day=?", (class_name, day))
-        await db.commit()
-    await query.message.edit_text("Өшірілді ✅", reply_markup=back_main_btn())
-    await query.answer()
+    try:
+        _, class_name, day = query.data.split("_")
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("DELETE FROM homework WHERE class=? AND day=?", (class_name, day))
+            await db.commit()
+        await query.message.edit_text("Өшірілді ✅", reply_markup=back_main_btn())
+        await query.answer()
+    except Exception as e:
+        logger.error(f"Delete HW error: {e}")
+        await query.message.answer(f"Қате ❌: {e}")
 
 # ----------------- Notify -----------------
 async def notify_admins(bot: Bot):
     for admin_id in ADMIN_CLASSES.keys():
         try:
             await bot.send_message(admin_id, "⏰ Ескерту! Үй тапсырмасын толтыруды ұмытпа 📚")
-        except Exception as e:
-            logger.warning(f"Failed to notify {admin_id}: {e}")
+        except:
+            pass
 
 # ----------------- FastAPI routes -----------------
 @app.get("/")
