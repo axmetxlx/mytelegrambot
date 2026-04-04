@@ -236,11 +236,12 @@ async def delete_hw(query: CallbackQuery):
 
 # ----------------- Webhook -----------------
 @app.post("/api/bot")
-async def webhook(request: Request):
-    data = await request.json()
-    update = types.Update(**data)
-    await dp.feed_update(bot, update)
-    return {"ok": True}
+async def telegram_webhook(update: dict):
+    try:
+        await dp.feed_update(bot, types.Update(**update))
+        return {"ok": True}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.on_event("startup")
 async def on_startup():
