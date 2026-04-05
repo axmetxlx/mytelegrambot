@@ -17,6 +17,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CLASSES = {
+    5835122494: "8AE",
     5199542672: "8A",
     7357106839: "9A"
 }
